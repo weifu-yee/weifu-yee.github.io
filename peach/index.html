@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>三視圖</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://threejs.org/build/three.module.js",
+        "three/examples/jsm/controls/OrbitControls": "https://threejs.org/examples/jsm/controls/OrbitControls.js",
+        "three/examples/jsm/loaders/MTLLoader": "https://threejs.org/examples/jsm/loaders/MTLLoader.js",
+        "three/examples/jsm/loaders/OBJLoader": "https://threejs.org/examples/jsm/loaders/OBJLoader.js"
+      }
+    }
+  </script>
+  <style>
+    #hint {
+      position: absolute;
+      bottom: 20px; /* 距离底部的距离 */
+      left: 50%; /* 水平居中 */
+      transform: translateX(-50%); /* 水平居中 */
+      background-color: rgba(171, 171, 171, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      /* border-bottom: 5px solid #f43939; 将底部边框颜色改为灰色 */
+    }
+  </style>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      background-color: #f0f0f0;
+    }
+    #c {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">按住滑鼠左鍵並拖動以旋轉視角</div>
+  <!-- <script src="scripts/3d_model_editor.js" type="module"></script> -->
+  <script src="scripts/3d_model_perspective.js" type="module"></script>
+</body>
+</html>
