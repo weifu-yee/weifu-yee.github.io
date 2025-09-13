@@ -64,12 +64,22 @@
       <div id="advancedPanel" class="hidden w-full max-w-xl mb-4 p-3 bg-white border rounded">
         <p class="text-sm font-semibold mb-2">勾選關鍵字（可複選）</p>
         <div id="keywordChecks" class="grid grid-cols-2 gap-2 mb-2"></div>
+        <div class="flex justify-end mt-1">
+          <button id="clearKeywordsBtn" type="button" class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">清除關鍵字選擇</button>
+        </div>
         <label class="flex items-center gap-2">
           <input id="kwOther" type="checkbox" class="accent-blue-600" />
           <span>其他</span>
           <input id="kwOtherInput" type="text" class="flex-1 border rounded px-2 py-1" placeholder="英文逗號分隔：ramen, hotpot" disabled />
         </label>
+        <div class="flex justify-end mt-1">
+          <button id="clearKeywordsBtn" type="button" class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">清除關鍵字選擇</button>
+        </div>
         <p class="text-xs text-gray-500 mt-2">若未選擇，將從內建關鍵字中隨機挑選。</p>
+        <label class="flex items-center gap-2 mt-2">
+          <input id="diceKeywords" type="checkbox" class="accent-blue-600" />
+          <span>隨機選一個關鍵字</span>
+        </label>
         <hr class="my-3" />
         <div class="flex items-center gap-3">
           <label for="selectCount" class="text-sm font-semibold">欲選擇的餐廳數量</label>
@@ -167,11 +177,43 @@
     const toggleAdvancedBtn = document.getElementById("toggleAdvanced");
     const advancedPanel = document.getElementById("advancedPanel");
     const keywordChecksEl = document.getElementById("keywordChecks");
+    const diceKeywordsEl = document.getElementById("diceKeywords");
+    // Ensure only one clear button exists (move effect)
+    (function(){
+      const nodes = document.querySelectorAll('#clearKeywordsBtn');
+      if (nodes.length > 1) {
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const n = nodes[i];
+          if (n && n.parentElement) {
+            n.parentElement.remove();
+          } else if (n) {
+            n.remove();
+          }
+        }
+      }
+    })();
+    const clearKeywordsBtn = document.getElementById("clearKeywordsBtn");
+    // Style the dice keyword label differently
+    (function(){
+      if (!diceKeywordsEl) return;
+      const span = diceKeywordsEl.parentElement && diceKeywordsEl.parentElement.querySelector('span');
+      if (span) {
+        span.classList.add('text-purple-700','font-semibold');
+        // Update wording for clarity
+        span.textContent = '隨機選一個關鍵字';
+      }
+    })();
     const kwOtherEl = document.getElementById("kwOther");
     const kwOtherInputEl = document.getElementById("kwOtherInput");
     const selectCountEl = document.getElementById("selectCount");
     toggleAdvancedBtn.onclick = () => advancedPanel.classList.toggle("hidden");
     kwOtherEl.onchange = () => { kwOtherInputEl.disabled = !kwOtherEl.checked; };
+    if (clearKeywordsBtn) {
+      clearKeywordsBtn.onclick = () => {
+        keywordChecksEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+        kwOtherEl.checked = false; kwOtherInputEl.value = ''; kwOtherInputEl.disabled = true;
+      };
+    }
 
     function renderKeywordChecks() {
       keywordChecksEl.innerHTML = "";
@@ -195,7 +237,12 @@
         const extras = kwOtherInputEl.value.split(',').map(s => s.trim()).filter(Boolean);
         picked.push(...extras);
       }
-      return picked.length ? picked : keywords;
+      const pool = picked.length ? picked : keywords;
+      if (diceKeywordsEl && diceKeywordsEl.checked && pool.length) {
+        const one = pool[Math.floor(Math.random() * pool.length)];
+        return [one];
+      }
+      return pool;
     }
 
     function getSelectCount() {
