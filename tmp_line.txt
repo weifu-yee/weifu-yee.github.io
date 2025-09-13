@@ -1,0 +1,1 @@
+        const loc = centers[d] || { lat: 24.8047, lng: 120.9714 }; // fallback: ?°ç«¹å¸?        return { d, kw, loc };
