@@ -53,7 +53,7 @@
       <!-- District selector -->
       <div id="districts" class="flex flex-wrap gap-2 mb-4"></div>
 
-      <button onclick="fetchRestaurants()"
+      <button onclick="fetchRestaurantsV2()"
               class="px-4 py-2 bg-green-500 text-white rounded shadow">
         搜尋餐廳 🔎
       </button>
@@ -96,6 +96,20 @@
 
     // Keyword pool for randomization
     const keywords = ["火鍋", "燒烤", "牛排", "拉麵", "早餐", "午餐", "晚餐", "酒吧", "小吃", "咖啡", "甜點", "餐廳", "美食", "聚餐", "宵夜", "異國料理", "素食", "海鮮", "便當", "炸物", "輕食", "飲料", "速食", "義大利麵", "漢堡", "壽司", "烤肉", "夜市"];
+
+    // District centers for location-based search
+    const centers = {
+      "竹南鎮": { lat: 24.6857, lng: 120.8767 },
+      "竹北市": { lat: 24.8358, lng: 121.0110 },
+      "新竹市": { lat: 24.8047, lng: 120.9714 },
+      "湖口鄉": { lat: 24.9023, lng: 121.0414 },
+      "新豐鄉": { lat: 24.9039, lng: 120.9937 },
+      "寶山鄉": { lat: 24.7502, lng: 121.0206 },
+      "竹東鎮": { lat: 24.7365, lng: 121.0888 },
+      "新埔鎮": { lat: 24.8258, lng: 121.0716 },
+      "芎林鄉": { lat: 24.7848, lng: 121.0743 },
+      "清華大學": { lat: 24.7955, lng: 120.9920 }
+    };
 
     function shuffle(array) {
       for (let i = array.length - 1; i > 0; i--) {
@@ -172,6 +186,49 @@
             restaurants = restaurants.slice(0, 20); // pick 20 only
             assignSlicesAndColors();
             alert("找到候選餐廳: " + restaurants.length + " 筆");
+          }
+        });
+      });
+    }
+
+    // New: Nearby Search with location/radius per district
+    function fetchRestaurantsV2() {
+      restaurants = [];
+      document.getElementById("restaurantList").innerHTML = "";
+      if (selected.size === 0) {
+        alert("請先選擇至少一個地區");
+        return;
+      }
+
+      const tasks = Array.from(selected).map(d => {
+        const kw = keywords[Math.floor(Math.random() * keywords.length)];
+        const loc = centers[d] || { lat: 24.8047, lng: 120.9714 }; // fallback: 新竹市
+        return { d, kw, loc };
+      });
+
+      const seen = new Set();
+      let done = 0;
+      tasks.forEach(({ d, kw, loc }) => {
+        const req = { location: loc, radius: 5000, type: 'restaurant', keyword: kw };
+        service.nearbySearch(req, (results, status, pagination) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK && Array.isArray(results)) {
+            for (const r of results) {
+              if (r.place_id && !seen.has(r.place_id)) {
+                seen.add(r.place_id);
+                restaurants.push(r);
+              }
+            }
+          }
+          if (pagination && pagination.hasNextPage) {
+            setTimeout(() => pagination.nextPage(), 300);
+          } else {
+            done++;
+            if (done === tasks.length) {
+              shuffle(restaurants);
+              restaurants = restaurants.slice(0, 20);
+              assignSlicesAndColors();
+              alert("找到可選餐廳: " + restaurants.length + " 家");
+            }
           }
         });
       });
