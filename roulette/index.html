@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>餐廳轉盤 🎡</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    #wheel {
+      width: 250px;
+      height: 250px;
+      border-radius: 50%;
+      border: 6px solid #374151;
+      position: relative;
+      transition: transform 3s cubic-bezier(0.25, 1.5, 0.5, 1);
+      transform-origin: center center;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      background: #374151;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+    }
+    #pointer {
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-right: 12px solid transparent;
+      border-top: 20px solid #ef4444; /* pointing downward */
+      position: absolute;
+      top: -2px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+    }
+    #map {
+      width: 100%;
+      height: 300px;
+      margin-top: 1rem;
+      border: 2px solid #ccc;
+      border-radius: 0.5rem;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-6">
+  <div class="flex w-full max-w-5xl gap-6">
+    <!-- Left side: Roulette -->
+    <div class="flex flex-col items-center flex-1">
+      <h1 class="text-2xl font-bold mb-4">餐廳轉盤 🎡</h1>
+
+      <!-- District selector -->
+      <div id="districts" class="flex flex-wrap gap-2 mb-4"></div>
+
+      <button onclick="fetchRestaurants()"
+              class="px-4 py-2 bg-green-500 text-white rounded shadow">
+        搜尋餐廳 🔎
+      </button>
+
+      <!-- Turntable wrapper with pointer -->
+      <div class="relative my-6" style="width:250px;height:250px;">
+        <div id="pointer"></div>
+        <div id="wheel" class="flex items-center justify-center text-xl font-bold">
+          轉盤
+        </div>
+      </div>
+
+      <button onclick="spin()"
+              class="px-4 py-2 bg-red-500 text-white rounded shadow">
+        開始轉動 🎲
+      </button>
+
+      <!-- Result -->
+      <div id="result" class="text-center mt-6"></div>
+
+      <!-- Embedded Map -->
+      <div id="map"></div>
+    </div>
+
+    <!-- Right side: Restaurant list -->
+    <div class="w-64 bg-white shadow rounded p-4 overflow-y-auto max-h-[500px]">
+      <h2 class="text-lg font-bold mb-2">候選餐廳</h2>
+      <ul id="restaurantList" class="list-disc list-inside text-gray-700 space-y-1"></ul>
+    </div>
+  </div>
+
+  <script>
+    const districts = ["清華大學", "新竹市", "竹北市", "湖口鄉", "新豐鄉", "寶山鄉", "竹東鎮", "北埔鄉", "頭份市", "竹南鎮"];
+    const selected = new Set();
+    let restaurants = [];
+    let service, map, marker;
+
+    // Color palette
+    const colors = ["#f87171", "#60a5fa", "#34d399", "#fbbf24", "#a78bfa", "#f472b6"];
+
+    // Keyword pool for randomization
+    const keywords = ["火鍋", "燒烤", "牛排", "拉麵", "早餐", "午餐", "晚餐", "酒吧", "小吃", "咖啡", "甜點", "餐廳", "美食", "聚餐", "宵夜", "異國料理", "素食", "海鮮", "便當", "炸物", "輕食", "飲料", "速食", "義大利麵", "漢堡", "壽司", "烤肉", "夜市"];
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    // Setup district buttons
+    const districtDiv = document.getElementById("districts");
+    districts.forEach(d => {
+      const btn = document.createElement("button");
+      btn.textContent = d;
+      btn.className = "px-3 py-1 rounded border bg-gray-200";
+      btn.onclick = () => {
+        if (selected.has(d)) {
+          selected.delete(d);
+          btn.className = "px-3 py-1 rounded border bg-gray-200";
+        } else {
+          selected.add(d);
+          btn.className = "px-3 py-1 rounded border bg-blue-500 text-white";
+        }
+      };
+      districtDiv.appendChild(btn);
+    });
+
+    // Decorative dots
+    const wheel = document.getElementById("wheel");
+    const dotCount = 36;
+    const radius = 120;
+    for (let i = 0; i < dotCount; i++) {
+      const angle = (2 * Math.PI / dotCount) * i;
+      const dot = document.createElement("div");
+      dot.className = "dot";
+      dot.style.transform = `translate(-50%, -50%) translate(${Math.cos(angle)*radius}px, ${Math.sin(angle)*radius}px)`;
+      wheel.appendChild(dot);
+    }
+
+    // Init Google Places Service + Map
+    function initApp() {
+      const tempMap = new google.maps.Map(document.createElement("div"));
+      service = new google.maps.places.PlacesService(tempMap);
+
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 24.8138, lng: 120.9675 },
+        zoom: 14,
+      });
+      marker = new google.maps.Marker({ map });
+    }
+
+    // Fetch restaurants with random keyword
+    function fetchRestaurants() {
+      restaurants = [];
+      document.getElementById("restaurantList").innerHTML = "";
+      if (selected.size === 0) {
+        alert("請先選擇區域！");
+        return;
+      }
+
+      const queries = Array.from(selected).map(d => {
+        const kw = keywords[Math.floor(Math.random()*keywords.length)];
+        return `${kw} 餐廳 in ${d}`;
+      });
+
+      let done = 0;
+      queries.forEach(q => {
+        service.textSearch({ query: q }, (results, status) => {
+          done++;
+          if (status === google.maps.places.PlacesServiceStatus.OK) {
+            restaurants.push(...results);
+          }
+          if (done === queries.length) {
+            shuffle(restaurants);
+            restaurants = restaurants.slice(0, 20); // pick 20 only
+            assignSlicesAndColors();
+            alert("找到候選餐廳: " + restaurants.length + " 筆");
+          }
+        });
+      });
+    }
+
+    function assignSlicesAndColors() {
+      if (restaurants.length === 0) return;
+      const slice = 360 / restaurants.length;
+      let gradientParts = [];
+      const list = document.getElementById("restaurantList");
+      list.innerHTML = "";
+
+      restaurants.forEach((r, i) => {
+        const color = colors[i % colors.length];
+        const startAngle = i * slice;
+        const endAngle = (i + 1) * slice;
+        const centerAngle = startAngle + slice / 2;
+
+        r._color = color;
+        r._sliceStart = startAngle;
+        r._sliceEnd = endAngle;
+        r._sliceCenter = centerAngle;
+
+        gradientParts.push(`${color} ${startAngle}deg ${endAngle}deg`);
+
+        const li = document.createElement("li");
+        li.innerHTML = `<span style="color:${color};font-weight:bold;">${r.name[0]}</span>${r.name.slice(1)}`;
+        list.appendChild(li);
+      });
+
+      wheel.style.background = `conic-gradient(${gradientParts.join(",")})`;
+    }
+
+    function spin() {
+      if (restaurants.length === 0) {
+        alert("請先搜尋餐廳！");
+        return;
+      }
+      const chosenIndex = Math.floor(Math.random() * restaurants.length);
+      const r = restaurants[chosenIndex];
+      const targetDeg = 3600 + (360 - r._sliceCenter);
+
+      wheel.style.transform = `rotate(${targetDeg}deg)`;
+
+      setTimeout(() => {
+        document.getElementById("result").innerHTML = `
+          <h2 class="text-xl font-bold" style="color:${r._color};">${r.name}</h2>
+          <p>${r.formatted_address || ""}</p>
+          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name)}"
+             target="_blank" class="text-blue-600 underline">
+             查看 Google 地圖
+          </a>`;
+        showOnMap(r);
+      }, 3200);
+    }
+
+    function showOnMap(place) {
+      if (!place.geometry || !place.geometry.location) return;
+      map.setCenter(place.geometry.location);
+      marker.setPosition(place.geometry.location);
+      marker.setTitle(place.name);
+    }
+  </script>
+
+  <!-- Load Google Maps JS API with Places library -->
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHJAKYPP4peYR5TIVm69256nqJ01gat9Q&libraries=places&callback=initApp">
+  </script>
+</body>
+</html>
