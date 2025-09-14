@@ -58,6 +58,17 @@
         <button id="addDistrictBtn" type="button" class="px-3 py-1 rounded bg-gray-700 text-white">新增</button>
       </div>
 
+      <!-- TW region cascaded selects -->
+      <div class="w-full max-w-xl flex flex-wrap items-center gap-2 mb-3">
+        <select id="countySelect" class="border rounded px-2 py-1">
+          <option value="">選擇縣市</option>
+        </select>
+        <select id="regionSelect" class="border rounded px-2 py-1" disabled>
+          <option value="">選擇鄉鎮市區</option>
+        </select>
+        <button id="addRegionBtn" type="button" class="px-3 py-1 rounded border bg-gray-200">加入</button>
+      </div>
+
       <div class="w-full max-w-xl flex items-center justify-between mb-2">
         <button id="toggleAdvanced" type="button" class="text-sm text-blue-600 underline">進階選項</button>
       </div>
@@ -123,6 +134,19 @@
           <label for="selectCount" class="text-sm font-semibold">欲選擇的餐廳數量</label>
           <input id="selectCount" type="number" min="2" max="36" value="20" class="w-24 border rounded px-2 py-1" />
           <span class="text-xs text-gray-500">(2–36，預設 20)</span>
+        </div>
+
+        <!-- Import Saved Lists (inside Advanced) -->
+        <hr class="my-3" />
+        <div class="flex flex-col gap-2">
+          <div class="text-sm font-semibold">從 Google 地圖已儲存清單匯入</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="savedFiles" type="file" multiple accept=".json" class="hidden" />
+            <button id="chooseSavedBtn" type="button" class="px-3 py-1 rounded bg-gray-700 text-white">選擇檔案</button>
+            <button id="buildFromSavedBtn" type="button" class="px-3 py-1 rounded bg-green-600 text-white">用匯入地點建立</button>
+            <span id="savedSummary" class="text-sm text-gray-600">尚未匯入</span>
+          </div>
+          <div class="text-xs text-gray-500">從 Google Takeout 匯出：Maps → Your places → Saved，下載並解壓後上傳 JSON。</div>
         </div>
       </div>
 
@@ -214,6 +238,74 @@
       districtInputEl.value = '';
     };
 
+    // Cascaded county -> district selection (Taiwan)
+    const countySelect = document.getElementById('countySelect');
+    const regionSelect = document.getElementById('regionSelect');
+    const addRegionBtn = document.getElementById('addRegionBtn');
+
+    const twRegions = {
+      "台北市": ["中正區","大同區","中山區","松山區","大安區","萬華區","信義區","士林區","北投區","內湖區","南港區","文山區"],
+      "新北市": ["板橋區","新莊區","泰山區","林口區","淡水區","金山區","八里區","萬里區","石門區","三芝區","瑞芳區","汐止區","平溪區","貢寮區","雙溪區","深坑區","石碇區","新店區","坪林區","烏來區","中和區","永和區","土城區","三峽區","樹林區","鶯歌區","三重區","蘆洲區","五股區"],
+      "桃園市": ["桃園區","中壢區","平鎮區","八德區","楊梅區","蘆竹區","龜山區","龍潭區","大溪區","大園區","觀音區","新屋區","復興區"],
+      "台中市": ["中區","東區","南區","西區","北區","北屯區","西屯區","南屯區","太平區","大里區","霧峰區","烏日區","豐原區","后里區","石岡區","東勢區","新社區","和平區","神岡區","潭子區","大雅區","大肚區","沙鹿區","龍井區","梧棲區","清水區","大甲區","外埔區","大安區"],
+      "台南市": ["中西區","東區","南區","北區","安平區","安南區","永康區","歸仁區","新化區","左鎮區","玉井區","楠西區","南化區","仁德區","關廟區","龍崎區","官田區","麻豆區","佳里區","西港區","七股區","將軍區","學甲區","北門區","新營區","後壁區","白河區","東山區","六甲區","下營區","柳營區","鹽水區","善化區","大內區","山上區","新市區","安定區"],
+      "高雄市": ["楠梓區","左營區","鼓山區","三民區","鹽埕區","前金區","新興區","苓雅區","前鎮區","小港區","旗津區","鳳山區","大寮區","鳥松區","林園區","仁武區","大樹區","大社區","岡山區","路竹區","橋頭區","梓官區","彌陀區","永安區","燕巢區","田寮區","阿蓮區","湖內區","茄萣區","旗山區","美濃區","六龜區","內門區","杉林區","甲仙區","桃源區","那瑪夏區","茂林區"],
+      "基隆市": ["仁愛區","信義區","中正區","中山區","安樂區","暖暖區","七堵區"],
+      "新竹市": ["東區","北區","香山區"],
+      "新竹縣": ["竹北市","竹東鎮","新埔鎮","關西鎮","湖口鄉","新豐鄉","芎林鄉","橫山鄉","北埔鄉","寶山鄉","峨眉鄉","尖石鄉","五峰鄉"],
+      "苗栗縣": ["苗栗市","頭份市","苑裡鎮","通霄鎮","竹南鎮","後龍鎮","卓蘭鎮","大湖鄉","公館鄉","銅鑼鄉","南庄鄉","頭屋鄉","三義鄉","西湖鄉","造橋鄉","三灣鄉","獅潭鄉","泰安鄉"],
+      "彰化縣": ["彰化市","鹿港鎮","和美鎮","線西鄉","伸港鄉","福興鄉","秀水鄉","花壇鄉","芬園鄉","員林市","溪湖鎮","田中鎮","大村鄉","埔鹽鄉","埔心鄉","永靖鄉","社頭鄉","二水鄉","北斗鎮","二林鎮","田尾鄉","埤頭鄉","芳苑鄉","大城鄉","竹塘鄉","溪州鄉"],
+      "南投縣": ["南投市","埔里鎮","草屯鎮","竹山鎮","集集鎮","名間鄉","鹿谷鄉","中寮鄉","魚池鄉","國姓鄉","水里鄉","信義鄉","仁愛鄉"],
+      "雲林縣": ["斗六市","斗南鎮","虎尾鎮","西螺鎮","土庫鎮","北港鎮","莿桐鄉","林內鄉","二崙鄉","崙背鄉","麥寮鄉","東勢鄉","褒忠鄉","臺西鄉","元長鄉","四湖鄉","口湖鄉","水林鄉"],
+      "嘉義市": ["東區","西區"],
+      "嘉義縣": ["太保市","朴子市","布袋鎮","大林鎮","民雄鄉","溪口鄉","新港鄉","六腳鄉","東石鄉","義竹鄉","鹿草鄉","水上鄉","中埔鄉","竹崎鄉","梅山鄉","番路鄉","大埔鄉","阿里山鄉"],
+      "宜蘭縣": ["宜蘭市","羅東鎮","蘇澳鎮","頭城鎮","礁溪鄉","壯圍鄉","五結鄉","冬山鄉","三星鄉","大同鄉","南澳鄉"],
+      "屏東縣": ["屏東市","潮州鎮","東港鎮","恆春鎮","萬丹鄉","長治鄉","麟洛鄉","九如鄉","里港鄉","鹽埔鄉","高樹鄉","萬巒鄉","內埔鄉","竹田鄉","新埤鄉","枋寮鄉","新園鄉","崁頂鄉","林邊鄉","南州鄉","佳冬鄉","琉球鄉","車城鄉","枋山鄉","春日鄉","獅子鄉","牡丹鄉","三地門鄉","瑪家鄉","泰武鄉","來義鄉"],
+      "花蓮縣": ["花蓮市","鳳林鎮","玉里鎮","新城鄉","吉安鄉","壽豐鄉","光復鄉","豐濱鄉","瑞穗鄉","富里鄉","秀林鄉","萬榮鄉","卓溪鄉"],
+      "台東縣": ["台東市","成功鎮","關山鎮","卑南鄉","鹿野鄉","池上鄉","東河鄉","長濱鄉","太麻里鄉","大武鄉","綠島鄉","海端鄉","延平鄉","金峰鄉","達仁鄉","蘭嶼鄉"],
+      "澎湖縣": ["馬公市","湖西鄉","白沙鄉","西嶼鄉","望安鄉","七美鄉"],
+      "金門縣": ["金城鎮","金沙鎮","金湖鎮","金寧鄉","烈嶼鄉","烏坵鄉"],
+      "連江縣": ["南竿鄉","北竿鄉","莒光鄉","東引鄉"]
+    };
+
+    // Populate county select
+    if (countySelect) {
+      Object.keys(twRegions).forEach(k => {
+        const opt = document.createElement('option'); opt.value = k; opt.textContent = k; countySelect.appendChild(opt);
+      });
+    }
+    if (countySelect && regionSelect) {
+      countySelect.addEventListener('change', () => {
+        const k = countySelect.value;
+        regionSelect.innerHTML = '';
+        const def = document.createElement('option'); def.value=''; def.textContent='選擇鄉鎮市區'; regionSelect.appendChild(def);
+        if (k && twRegions[k]) {
+          twRegions[k].forEach(r => { const o=document.createElement('option'); o.value=r; o.textContent=r; regionSelect.appendChild(o); });
+          regionSelect.disabled = false;
+        } else {
+          regionSelect.disabled = true;
+        }
+      });
+    }
+    if (addRegionBtn) {
+      addRegionBtn.onclick = () => {
+        const c = countySelect && countySelect.value ? countySelect.value : '';
+        const r = regionSelect && regionSelect.value ? regionSelect.value : '';
+        if (!c || !r) return;
+        const full = `${c} ${r}`;
+        const exists = Array.from(districtDiv.querySelectorAll('button')).find(b => b.textContent === full);
+        if (exists) {
+          selected.add(full);
+          exists.className = "px-3 py-1 rounded border bg-blue-500 text-white";
+        } else {
+          createDistrictButton(full);
+          selected.add(full);
+          const lastBtn = Array.from(districtDiv.querySelectorAll('button')).pop();
+          if (lastBtn && lastBtn.textContent === full) lastBtn.className = "px-3 py-1 rounded border bg-blue-500 text-white";
+        }
+      };
+    }
+
     // Advanced options: keyword checks
     const toggleAdvancedBtn = document.getElementById("toggleAdvanced");
     const advancedPanel = document.getElementById("advancedPanel");
@@ -261,6 +353,9 @@
             districtDiv.classList.remove('opacity-50','pointer-events-none');
           }
         }
+        if (countySelect) countySelect.disabled = on;
+        if (regionSelect) regionSelect.disabled = on || !(countySelect && countySelect.value);
+        if (addRegionBtn) addRegionBtn.disabled = on;
       };
     }
     if (clearKeywordsBtn) {
@@ -580,6 +675,170 @@
       marker.setPosition(place.geometry.location);
       marker.setTitle(place.name);
     }
+  </script>
+
+
+  <script>
+    // Import Google Maps Saved lists (Google Takeout JSON)
+    let importedSaved = [];
+    let importedListsMeta = [];
+
+    function parseSavedJson(json, fileName) {
+      const out = [];
+      if (Array.isArray(json)) {
+        for (const item of json) {
+          const name = item.title || item.name || (item.properties && (item.properties.Name || item.properties.name || item.properties.title)) || '';
+          const url = item.googleMapsUrl || item.url || (item.properties && (item.properties.GoogleMapsURL || item.properties.googleMapsUrl)) || '';
+          const loc = item.location || item.coordinates || item.geo || item.geometry;
+          let lat, lng;
+          if (loc && typeof loc === 'object') {
+            if (typeof loc.latitude === 'number' && typeof loc.longitude === 'number') { lat = loc.latitude; lng = loc.longitude; }
+            else if (typeof loc.lat === 'number' && typeof loc.lng === 'number') { lat = loc.lat; lng = loc.lng; }
+            else if (Array.isArray(loc) && loc.length >= 2) { lat = loc[1]; lng = loc[0]; }
+            else if (loc.type === 'Point' && Array.isArray(loc.coordinates)) { lng = loc.coordinates[0]; lat = loc.coordinates[1]; }
+          }
+          let placeId = null;
+          if (typeof url === 'string') {
+            const m = url.match(/place_id:([A-Za-z0-9_-]+)/);
+            if (m) placeId = m[1];
+          }
+          if (name || placeId || (lat != null && lng != null)) {
+            out.push({ name, place_id: placeId || null, lat, lng });
+          }
+        }
+      } else if (json && typeof json === 'object') {
+        if (Array.isArray(json.features)) {
+          for (const f of json.features) {
+            const name = (f.properties && (f.properties.name || f.properties.Name || f.properties.title)) || '';
+            const url = (f.properties && (f.properties.googleMapsUrl || f.properties.GoogleMapsURL)) || '';
+            let lat, lng;
+            if (f.geometry && f.geometry.type === 'Point' && Array.isArray(f.geometry.coordinates)) {
+              lng = f.geometry.coordinates[0]; lat = f.geometry.coordinates[1];
+            }
+            let placeId = null;
+            if (typeof url === 'string') {
+              const m = url.match(/place_id:([A-Za-z0-9_-]+)/);
+              if (m) placeId = m[1];
+            }
+            if (name || placeId || (lat != null && lng != null)) {
+              out.push({ name, place_id: placeId || null, lat, lng });
+            }
+          }
+        }
+      }
+      importedListsMeta.push({ fileName, count: out.length });
+      importedSaved.push(...out);
+    }
+
+    function summarizeSaved() {
+      const el = document.getElementById('savedSummary');
+      if (!el) return;
+      const total = importedSaved.length;
+      if (!total) { el.textContent = 'No places imported yet.'; return; }
+      const lines = importedListsMeta.map(m => `${m.fileName}: ${m.count}`).join(', ');
+      el.textContent = `Imported places: ${total} (${lines})`;
+    }
+
+    function wireSavedImport() {
+      const input = document.getElementById('savedFiles');
+      const chooseBtn = document.getElementById('chooseSavedBtn');
+      const btn = document.getElementById('buildFromSavedBtn');
+      if (chooseBtn && input) {
+        chooseBtn.addEventListener('click', () => input.click());
+      }
+      if (input) {
+        input.addEventListener('change', async (e) => {
+          importedSaved = [];
+          importedListsMeta = [];
+          const files = Array.from(e.target.files || []);
+          for (const f of files) {
+            try {
+              const text = await f.text();
+              const json = JSON.parse(text);
+              parseSavedJson(json, f.name);
+            } catch (err) {
+              console.warn('Failed to parse', f.name, err);
+            }
+          }
+          summarizeSaved();
+        });
+      }
+      if (btn) btn.addEventListener('click', buildFromSaved);
+    }
+
+    async function buildFromSaved() {
+      if (!importedSaved.length) { alert('Please import Saved lists JSON files first.'); return; }
+      if (!window.service) { alert('Maps not ready yet.'); return; }
+      restaurants = [];
+      const seen = new Set();
+      const priceRange = (typeof getPriceRange === 'function') ? getPriceRange() : null;
+
+      const candidates = importedSaved.slice(0);
+      const totalMs = Math.round(3000 + 80 * candidates.length);
+      if (typeof beginLoading === 'function') beginLoading(totalMs);
+
+      let done = 0;
+      function maybeFinish() {
+        done++;
+        if (done >= candidates.length) {
+          if (typeof finishLoading === 'function') finishLoading();
+          if (priceRange) {
+            restaurants = restaurants.filter(r => typeof r.price_level !== 'number' || (r.price_level >= priceRange.min && r.price_level <= priceRange.max));
+          }
+          shuffle(restaurants);
+          const count = (typeof getSelectCount === 'function') ? getSelectCount() : 20;
+          restaurants = restaurants.slice(0, Math.max(1, Math.min(count, restaurants.length)));
+          assignSlicesAndColors();
+          alert(`Added ${restaurants.length} from saved lists.`);
+        }
+      }
+
+      for (const item of candidates) {
+        if (item.place_id) {
+          window.service.getDetails({ placeId: item.place_id, fields: ['place_id','name','geometry','vicinity','formatted_address','types','price_level'] }, (res, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && res) {
+              if (!seen.has(res.place_id)) {
+                seen.add(res.place_id);
+                if (!res.types || res.types.includes('restaurant') || res.types.includes('food') || res.types.includes('cafe') || res.types.includes('bar')) {
+                  restaurants.push(res);
+                }
+              }
+            }
+            maybeFinish();
+          });
+        } else if (item.name && (item.lat != null && item.lng != null)) {
+          const loc = new google.maps.LatLng(item.lat, item.lng);
+          const req = { query: item.name, location: loc, radius: 800, region: 'TW', type: 'restaurant' };
+          window.service.textSearch(req, (results, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && Array.isArray(results) && results.length) {
+              for (const r of results) {
+                if (r.place_id && !seen.has(r.place_id)) {
+                  seen.add(r.place_id);
+                  restaurants.push(r);
+                  break;
+                }
+              }
+            }
+            maybeFinish();
+          });
+        } else if (item.name) {
+          window.service.textSearch({ query: item.name, region: 'TW', type: 'restaurant' }, (results, status) => {
+            if (status === google.maps.places.PlacesServiceStatus.OK && Array.isArray(results) && results.length) {
+              const r = results[0];
+              if (r.place_id && !seen.has(r.place_id)) {
+                seen.add(r.place_id);
+                restaurants.push(r);
+              }
+            }
+            maybeFinish();
+          });
+        } else {
+          maybeFinish();
+        }
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', wireSavedImport);
   </script>
 
   <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCHJAKYPP4peYR5TIVm69256nqJ01gat9Q&libraries=places&callback=initApp"></script>

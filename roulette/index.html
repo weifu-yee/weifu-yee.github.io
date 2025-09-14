@@ -72,6 +72,13 @@
       <div class="w-full max-w-xl flex items-center justify-between mb-2">
         <button id="toggleAdvanced" type="button" class="text-sm text-blue-600 underline">進階選項</button>
       </div>
+      <!-- Open now filter (outside Advanced) -->
+      <div class="w-full max-w-xl flex items-center gap-3 mb-3">
+        <label class="flex items-center gap-2">
+          <input id="openNowOnly" type="checkbox" class="accent-blue-600" />
+          <span>只顯示營業中</span>
+        </label>
+      </div>
       <div id="advancedPanel" class="hidden w-full max-w-xl mb-4 p-3 bg-white border rounded">
         <p class="text-sm font-semibold mb-2">勾選關鍵字（可複選）</p>
         <div id="keywordChecks" class="grid grid-cols-2 gap-2 mb-2"></div>
@@ -243,6 +250,30 @@
     const regionSelect = document.getElementById('regionSelect');
     const addRegionBtn = document.getElementById('addRegionBtn');
 
+    // Unify Add button labels and move Open-Now block above Advanced
+    try {
+      const addDistrictEl = document.getElementById('addDistrictBtn');
+      const addRegionEl = document.getElementById('addRegionBtn');
+      if (addDistrictEl) addDistrictEl.textContent = '加入';
+      if (addRegionEl) addRegionEl.textContent = '加入';
+      // Ensure both buttons share the same color/style
+      const btnClass = 'px-3 py-1 rounded bg-gray-700 text-white';
+      if (addDistrictEl) addDistrictEl.className = btnClass;
+      if (addRegionEl) addRegionEl.className = btnClass;
+      const openNowCheckbox = document.getElementById('openNowOnly');
+      const toggleAdvancedBtnEl = document.getElementById('toggleAdvanced');
+      if (openNowCheckbox && toggleAdvancedBtnEl) {
+        const openNowBlock = openNowCheckbox.closest('div');
+        const toggleBlock = toggleAdvancedBtnEl.closest('div');
+        if (openNowBlock && toggleBlock && toggleBlock.parentElement && openNowBlock !== toggleBlock.previousElementSibling) {
+          toggleBlock.parentElement.insertBefore(openNowBlock, toggleBlock);
+        }
+        // Ensure the label text is clean
+        const openNowLabel = openNowCheckbox.closest('label')?.querySelector('span');
+        if (openNowLabel) openNowLabel.textContent = '只顯示營業中';
+      }
+    } catch (e) { /* noop */ }
+
     const twRegions = {
       "台北市": ["中正區","大同區","中山區","松山區","大安區","萬華區","信義區","士林區","北投區","內湖區","南港區","文山區"],
       "新北市": ["板橋區","新莊區","泰山區","林口區","淡水區","金山區","八里區","萬里區","石門區","三芝區","瑞芳區","汐止區","平溪區","貢寮區","雙溪區","深坑區","石碇區","新店區","坪林區","烏來區","中和區","永和區","土城區","三峽區","樹林區","鶯歌區","三重區","蘆洲區","五股區"],
@@ -315,6 +346,7 @@
     const costMaxEl = document.getElementById("costMax");
     const useMyLocationEl = document.getElementById("useMyLocation");
     const radiusKmEl = document.getElementById("radiusKm");
+    const openNowEl = document.getElementById("openNowOnly");
     // Ensure only one clear button exists (move effect)
     (function(){
       const nodes = document.querySelectorAll('#clearKeywordsBtn');
@@ -485,6 +517,7 @@
       restaurants = [];
       document.getElementById("restaurantList").innerHTML = "";
       const usingMyLoc = !!(useMyLocationEl && useMyLocationEl.checked);
+      const onlyOpen = !!(openNowEl && openNowEl.checked);
       if (usingMyLoc) { try { selected.add('__MY_LOC__'); } catch (e) {} }
       if (selected.size === 0) { alert("請先選擇至少一個地區"); return; }
       const pool = getActiveKeywords();
@@ -507,12 +540,14 @@
           tasks.forEach(({ kw }) => {
             const req = { location: center, radius: getRadiusMeters(), type: 'restaurant', keyword: kw };
             if (priceRange) { req.minPriceLevel = priceRange.min; req.maxPriceLevel = priceRange.max; }
+            if (onlyOpen) { req.openNow = true; }
             service.nearbySearch(req, (results, status, pagination) => {
               if (status === google.maps.places.PlacesServiceStatus.OK && Array.isArray(results)) {
                 for (const r of results) {
                   if (priceRange && typeof r.price_level === 'number') {
                     if (r.price_level < priceRange.min || r.price_level > priceRange.max) continue;
                   }
+                  if (onlyOpen && r.opening_hours && typeof r.opening_hours.open_now === 'boolean' && !r.opening_hours.open_now) continue;
                   if (r.place_id && !seen.has(r.place_id)) { seen.add(r.place_id); restaurants.push(r); }
                 }
               }
@@ -522,12 +557,14 @@
                 if ((!results || results.length === 0)) {
                   const tReq = { query: `${kw} restaurant`, location: center, radius: getRadiusMeters(), region: 'TW' };
                   if (priceRange) { tReq.minPriceLevel = priceRange.min; tReq.maxPriceLevel = priceRange.max; }
+                  if (onlyOpen) { tReq.openNow = true; }
                   service.textSearch(tReq, (tRes, tStatus) => {
                     if (tStatus === google.maps.places.PlacesServiceStatus.OK && Array.isArray(tRes)) {
                       for (const r of tRes) {
                         if (priceRange && typeof r.price_level === 'number') {
                           if (r.price_level < priceRange.min || r.price_level > priceRange.max) continue;
                         }
+                        if (onlyOpen && r.opening_hours && typeof r.opening_hours.open_now === 'boolean' && !r.opening_hours.open_now) continue;
                         if (r.place_id && !seen.has(r.place_id)) { seen.add(r.place_id); restaurants.push(r); }
                       }
                     }
@@ -540,6 +577,9 @@
               function finalize() {
                 if (typeof finishLoading === 'function') finishLoading();
                 if (++done === tasks.length) {
+                  if (onlyOpen) {
+                    restaurants = restaurants.filter(r => !(r.opening_hours && typeof r.opening_hours.open_now === 'boolean') || r.opening_hours.open_now);
+                  }
                   shuffle(restaurants);
                   const count = (typeof getSelectCount === 'function') ? getSelectCount() : 20;
                   restaurants = restaurants.slice(0, Math.max(1, Math.min(count, restaurants.length)));
@@ -569,7 +609,9 @@
 
           if (!center) {
             const query = `${kw} restaurant ${d}`;
-            service.textSearch({ query, region: 'TW' }, (tRes, tStatus) => {
+            const tParams = { query, region: 'TW' };
+            if (onlyOpen) { tParams.openNow = true; }
+            service.textSearch(tParams, (tRes, tStatus) => {
               if (tStatus === google.maps.places.PlacesServiceStatus.OK && Array.isArray(tRes)) {
                 for (const r of tRes) {
                   if (r.place_id && !seen.has(r.place_id)) { seen.add(r.place_id); restaurants.push(r); }
@@ -585,6 +627,7 @@
             const pr = getPriceRange();
             if (pr) { req.minPriceLevel = pr.min; req.maxPriceLevel = pr.max; }
           }
+          if (onlyOpen) { req.openNow = true; }
           service.nearbySearch(req, (results, status, pagination) => {
             if (status === google.maps.places.PlacesServiceStatus.OK && Array.isArray(results)) {
               for (const r of results) {
@@ -594,6 +637,7 @@
                 }
                 const inside = !bounds || (r.geometry && r.geometry.location && bounds.contains(r.geometry.location));
                 if (!inside) continue;
+                if (onlyOpen && r.opening_hours && typeof r.opening_hours.open_now === 'boolean' && !r.opening_hours.open_now) continue;
                 if (r.place_id && !seen.has(r.place_id)) { seen.add(r.place_id); restaurants.push(r); }
               }
             }
@@ -605,6 +649,7 @@
                 const tReq = { query, location: center, radius: 6000, region: 'TW' };
                 const pr2 = (typeof getPriceRange === 'function') ? getPriceRange() : null;
                 if (pr2) { tReq.minPriceLevel = pr2.min; tReq.maxPriceLevel = pr2.max; }
+                if (onlyOpen) { tReq.openNow = true; }
                 service.textSearch(tReq, (tRes, tStatus) => {
                   if (tStatus === google.maps.places.PlacesServiceStatus.OK && Array.isArray(tRes)) {
                     for (const r of tRes) {
@@ -613,6 +658,7 @@
                       }
                       const inside2 = !bounds || (r.geometry && r.geometry.location && bounds.contains(r.geometry.location));
                       if (!inside2) continue;
+                      if (onlyOpen && r.opening_hours && typeof r.opening_hours.open_now === 'boolean' && !r.opening_hours.open_now) continue;
                       if (r.place_id && !seen.has(r.place_id)) { seen.add(r.place_id); restaurants.push(r); }
                     }
                   }
@@ -628,6 +674,9 @@
 
       function finalizeWheel() {
         if (typeof finishLoading === 'function') finishLoading();
+        if (onlyOpen) {
+          restaurants = restaurants.filter(r => !(r.opening_hours && typeof r.opening_hours.open_now === 'boolean') || r.opening_hours.open_now);
+        }
         shuffle(restaurants);
         const count = (typeof getSelectCount === 'function') ? getSelectCount() : 20;
         restaurants = restaurants.slice(0, Math.max(1, Math.min(count, restaurants.length)));
@@ -660,7 +709,10 @@
       const targetDeg = 3600 + (360 - r._sliceCenter);
       wheel.style.transform = `rotate(${targetDeg}deg)`;
       setTimeout(() => {
-        const url = r.place_id ? `https://www.google.com/maps/place/?q=place_id:${r.place_id}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name)}`;
+        // Use query_place_id format for better mobile compatibility
+        const url = r.place_id
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name || r.vicinity || r.formatted_address || '')}&query_place_id=${encodeURIComponent(r.place_id)}`
+          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name || r.vicinity || r.formatted_address || '')}`;
         document.getElementById("result").innerHTML = `
           <h2 class="text-xl font-bold" style="color:${r._color};">${r.name}</h2>
           <p>${r.vicinity || r.formatted_address || ''}</p>
@@ -772,6 +824,7 @@
       restaurants = [];
       const seen = new Set();
       const priceRange = (typeof getPriceRange === 'function') ? getPriceRange() : null;
+      const onlyOpen = !!(openNowEl && openNowEl.checked);
 
       const candidates = importedSaved.slice(0);
       const totalMs = Math.round(3000 + 80 * candidates.length);
@@ -795,12 +848,24 @@
 
       for (const item of candidates) {
         if (item.place_id) {
-          window.service.getDetails({ placeId: item.place_id, fields: ['place_id','name','geometry','vicinity','formatted_address','types','price_level'] }, (res, status) => {
+          window.service.getDetails({ placeId: item.place_id, fields: ['place_id','name','geometry','vicinity','formatted_address','types','price_level','opening_hours'] }, (res, status) => {
             if (status === google.maps.places.PlacesServiceStatus.OK && res) {
               if (!seen.has(res.place_id)) {
                 seen.add(res.place_id);
                 if (!res.types || res.types.includes('restaurant') || res.types.includes('food') || res.types.includes('cafe') || res.types.includes('bar')) {
-                  restaurants.push(res);
+                  if (onlyOpen) {
+                    let isOpen = false;
+                    if (res.opening_hours) {
+                      if (typeof res.opening_hours.isOpen === 'function') {
+                        try { isOpen = !!res.opening_hours.isOpen(); } catch (e) { isOpen = false; }
+                      } else if (typeof res.opening_hours.open_now === 'boolean') {
+                        isOpen = !!res.opening_hours.open_now;
+                      }
+                    }
+                    if (isOpen) restaurants.push(res);
+                  } else {
+                    restaurants.push(res);
+                  }
                 }
               }
             }
@@ -809,6 +874,7 @@
         } else if (item.name && (item.lat != null && item.lng != null)) {
           const loc = new google.maps.LatLng(item.lat, item.lng);
           const req = { query: item.name, location: loc, radius: 800, region: 'TW', type: 'restaurant' };
+          if (onlyOpen) { req.openNow = true; }
           window.service.textSearch(req, (results, status) => {
             if (status === google.maps.places.PlacesServiceStatus.OK && Array.isArray(results) && results.length) {
               for (const r of results) {
@@ -822,7 +888,9 @@
             maybeFinish();
           });
         } else if (item.name) {
-          window.service.textSearch({ query: item.name, region: 'TW', type: 'restaurant' }, (results, status) => {
+          const req2 = { query: item.name, region: 'TW', type: 'restaurant' };
+          if (onlyOpen) { req2.openNow = true; }
+          window.service.textSearch(req2, (results, status) => {
             if (status === google.maps.places.PlacesServiceStatus.OK && Array.isArray(results) && results.length) {
               const r = results[0];
               if (r.place_id && !seen.has(r.place_id)) {
